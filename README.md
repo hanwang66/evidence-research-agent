@@ -1,91 +1,127 @@
 # Evidence Research Agent
 
-An evidence-first industry research agent built on top of the open-source
-[deep-research](https://github.com/dzhng/deep-research) project.
+Evidence-first industry research agent. This branch is the Python rewrite of
+the original TypeScript implementation and is built on top of the open-source
+[dzhng/deep-research](https://github.com/dzhng/deep-research) project.
 
-The upstream project turns search results into `learnings` and appends a flat
-list of URLs. This version adds a verifiable evidence graph:
+The project turns a research question into a traceable evidence graph:
 
 ```text
-research question → claim → evidence quote → source quality → citation audit
+question → research plan → search → source quality → claim → evidence quote → verification → cited report
 ```
 
-The goal is not to make the model sound more confident. The goal is to make
-each important conclusion traceable, freshness-aware, and explicit about
-contradictory or insufficient evidence.
+The design goal is not simply to generate a fluent answer. Every important
+conclusion should be traceable to an exact quote, a source URL, a quality score,
+and a verification status.
 
-## Highlights
+## Feature map
 
-- Extracts claims and exact evidence quotes from crawled pages.
-- Preserves source metadata instead of reducing pages to plain strings.
-- Canonicalizes URLs and removes common tracking parameters.
-- Scores source authority, primaryness, freshness, and specificity.
-- Verifies claims as `verified`, `partially_verified`, `contradicted`, or
-  `unverified`.
-- Generates inline claim citations and a citation coverage audit.
-- Accepts industry, region, time range, and company constraints through the API.
-- Keeps the original recursive breadth/depth research loop.
+| Capability | What it does | Python status |
+|---|---|---|
+| Recursive research | Expands a question through breadth/depth controlled searches | Implemented |
+| Industry constraints | Adds industry, region, time range, and company context | Implemented |
+| Source normalization | Canonicalizes URLs and removes tracking parameters | Implemented |
+| Source classification | Identifies regulator, official, research, media, and unknown sources | Implemented |
+| Source quality scoring | Scores authority, primaryness, freshness, and specificity | Implemented |
+| Evidence extraction | Extracts exact quotes and maps them to source IDs | Implemented |
+| Claim verification | Marks claims as verified, partially verified, contradicted, or unverified | Implemented |
+| Citation audit | Measures citation coverage and reports missing citations | Implemented |
+| Async concurrency | Limits concurrent search requests with `asyncio.Semaphore` | Implemented |
+| FastAPI endpoint | Runs a complete research request and returns Markdown plus evidence data | Implemented |
+| Persistent research jobs | Resume, cache, and inspect historical tasks | Planned |
+| Evaluation dashboard | Track entailment, source quality, freshness, cost, and latency | Planned |
+
+## Why this is different from a basic Deep Research demo
+
+The upstream implementation reduces crawled pages to `learnings` and a flat URL
+list. This version keeps the relationship between:
+
+```text
+Claim → Evidence → Source
+```
+
+That enables three reliability checks:
+
+1. Does the quoted passage actually support the claim?
+2. Is the source authoritative, primary, and fresh enough for the question?
+3. Are there independent sources that contradict the conclusion?
+
+An authoritative source is not automatically proof of a claim. Contradictions
+and insufficient evidence are preserved in the report instead of being hidden.
+
+## TypeScript → Python mapping
+
+| Original TypeScript module | Python module | Responsibility |
+|---|---|---|
+| `src/deep-research.ts` | `evidence_research/research.py` | Research orchestration and recursion |
+| `src/sources.ts` | `evidence_research/sources.py` | URL normalization and source scoring |
+| `src/evidence.ts` | `evidence_research/evidence.py` | Evidence extraction and claim verification |
+| `src/citations.ts` | `evidence_research/citations.py` | Citation rendering and audit |
+| `src/industry.ts` | `evidence_research/industry.py` | Industry-specific constraints |
+| `src/api.ts` | `evidence_research/api.py` | FastAPI HTTP API |
+| Zod schemas | Dataclasses and typed model boundaries | Structured domain data |
+| `p-limit` | `asyncio.Semaphore` | Bounded concurrency |
+
+The original TypeScript version remains on `main` as the `v0.1.0` baseline. The
+Python migration is developed on `rewrite/python` so the rewrite can be
+reviewed as a focused architectural change.
 
 ## Quick start
 
-Requirements: Node.js 22 and API keys for Firecrawl and an OpenAI-compatible
-model endpoint.
+Requirements: Python 3.12, `uv`, a Firecrawl API key, and an OpenAI-compatible
+model API key.
 
 ```bash
-npm install
+uv sync --extra dev
 cp .env.example .env.local
 # edit .env.local
-npm test
-npm start
+
+uv run pytest
+uv run uvicorn evidence_research.api:app --reload --port 3051
 ```
 
-The CLI asks for a research question, breadth, depth, and report mode. The
-report is written to `report.md` and includes source quality and citation audit
-sections.
-
-## API example
-
-Start the API server:
+The API exposes `GET /healthz` and `POST /api/research`.
 
 ```bash
-npm run api
-```
-
-Generate an industry report:
-
-```bash
-curl -X POST http://localhost:3051/api/generate-report \
+curl -X POST http://localhost:3051/api/research \
   -H 'content-type: application/json' \
   -d '{
     "query": "What are the major competitive and technology trends?",
     "industry": "新能源汽车",
     "region": "中国",
-    "timeRange": "2023-2025",
+    "time_range": "2023-2025",
     "companies": ["比亚迪", "特斯拉", "理想汽车"],
     "breadth": 3,
     "depth": 2
   }'
 ```
 
-The API returns Markdown for `/api/generate-report`. `/api/research` returns
-the structured claims, evidence, and sources as JSON.
+The response contains:
+
+- `report`: Markdown report with inline claim citations;
+- `claims`: verification status and confidence for each conclusion;
+- `evidence`: exact quotes mapped to source IDs;
+- `sources`: URLs and quality scores;
+- `learnings` and `visited_urls`: compatibility fields from the upstream flow.
 
 ## Project structure
 
 ```text
-src/
-├── deep-research.ts       # Recursive research orchestration
-├── sources.ts             # URL normalization, source classification, scoring
-├── evidence.ts            # Claim/evidence extraction and verification
-├── citations.ts           # Inline citation rendering and audit
-├── industry.ts            # Industry research constraints and templates
-├── types/research.ts      # Evidence graph domain model
-└── api.ts                 # JSON and Markdown HTTP endpoints
+evidence_research/
+├── api.py          # FastAPI interface
+├── models.py       # Research domain models
+├── research.py     # Recursive orchestration
+├── providers.py    # Firecrawl and OpenAI-compatible adapters
+├── sources.py      # URL normalization and source quality scoring
+├── evidence.py     # Claim/evidence extraction and verification
+├── citations.py    # Citation rendering and audit
+├── industry.py     # Industry research request handling
+└── report.py       # Evidence-grounded report generation
 ```
 
-## Evaluation direction
+## Evaluation plan
 
-The project is designed to be evaluated on more than answer quality:
+The next evaluation layer will measure more than answer fluency:
 
 - citation coverage: important claims with citations;
 - citation entailment: whether the quote actually supports the claim;
@@ -93,8 +129,21 @@ The project is designed to be evaluated on more than answer quality:
 - contradiction recall: whether conflicting sources are surfaced;
 - freshness violations, latency, and cost per report.
 
+## Development workflow
+
+```bash
+git switch rewrite/python
+uv run pytest
+uv run ruff check evidence_research tests
+uv run mypy evidence_research
+```
+
+The pull request for this branch documents the migration from TypeScript to
+Python while keeping the original `main` branch stable.
+
 ## Attribution and license
 
-This project is a derivative work of `dzhng/deep-research`. It retains the
-upstream MIT license and attribution while adding the evidence graph, source
-scoring, verification, citation audit, and industry-specific request layer.
+This is a derivative work of `dzhng/deep-research`. The upstream MIT license
+and attribution are retained. The Python evidence graph, source scoring,
+verification, citation audit, industry request layer, and FastAPI integration
+are the additions in this branch.
