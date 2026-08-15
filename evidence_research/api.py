@@ -7,8 +7,8 @@ from pydantic import BaseModel, Field
 
 from .industry import IndustryRequest, build_industry_prompt
 from .providers import providers_from_env
-from .research import DeepResearchAgent
 from .report import write_report
+from .research import DeepResearchAgent
 
 app = FastAPI(title="Evidence Research Agent", version="0.2.0")
 

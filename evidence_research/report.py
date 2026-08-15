@@ -29,7 +29,8 @@ async def write_report(
     report = str(payload.get("reportMarkdown", ""))
     audit = audit_citations(report, claims)
     source_lines = [
-        f"- [{source.id}] {source.title or source.canonical_url} — quality {source.quality.score}/100 — {source.canonical_url}"
+        f"- [{source.id}] {source.title or source.canonical_url} — "
+        f"quality {source.quality.score}/100 — {source.canonical_url}"
         for source in sources
     ]
     source_text = "\n".join(source_lines)
