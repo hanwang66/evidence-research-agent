@@ -62,7 +62,9 @@ def providers_from_env() -> tuple[FirecrawlSearchProvider, OpenAIJsonModel]:
     if not firecrawl_key or not openai_key:
         raise RuntimeError("FIRECRAWL_KEY and OPENAI_KEY are required")
     return (
-        FirecrawlSearchProvider(firecrawl_key, os.environ.get("FIRECRAWL_BASE_URL", "https://api.firecrawl.dev")),
+        FirecrawlSearchProvider(
+            firecrawl_key, os.environ.get("FIRECRAWL_BASE_URL", "https://api.firecrawl.dev")
+        ),
         OpenAIJsonModel(
             openai_key,
             os.environ.get("CUSTOM_MODEL", "gpt-4o-mini"),

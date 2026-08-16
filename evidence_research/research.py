@@ -17,8 +17,7 @@ class DeepResearchAgent:
     async def _generate_queries(self, query: str, breadth: int) -> list[dict[str, str]]:
         payload = await self.model.generate_json(
             system=(
-                "You generate diverse, focused search queries for an industry researcher. "
-                "Return JSON only."
+                "You generate diverse, focused search queries for an industry researcher. Return JSON only."
             ),
             prompt=(
                 f"Generate at most {breadth} unique SERP queries for this research question: {query}\n"
