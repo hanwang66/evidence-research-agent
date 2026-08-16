@@ -21,9 +21,11 @@ async def write_report(
             "Clearly label contradicted and unverified claims. Return JSON only."
         ),
         prompt=(
-            f"Research question:\n{prompt}\n\nLearnings:\n" + "\n".join(learnings) +
-            "\n\nEvidence graph:\n" + evidence_graph_text(claims=claims, evidence=evidence, sources=sources) +
-            "\n\nReturn {reportMarkdown: string}."
+            f"Research question:\n{prompt}\n\nLearnings:\n"
+            + "\n".join(learnings)
+            + "\n\nEvidence graph:\n"
+            + evidence_graph_text(claims=claims, evidence=evidence, sources=sources)
+            + "\n\nReturn {reportMarkdown: string}."
         ),
     )
     report = str(payload.get("reportMarkdown", ""))

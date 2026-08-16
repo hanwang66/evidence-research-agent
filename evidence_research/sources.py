@@ -132,10 +132,7 @@ def score_source(
     if specificity >= 0.7:
         reasons.append("contains substantial source content")
 
-    score = round(
-        (authority * 0.3 + primaryness * 0.25 + freshness * 0.2 + specificity * 0.25)
-        * 100
-    )
+    score = round((authority * 0.3 + primaryness * 0.25 + freshness * 0.2 + specificity * 0.25) * 100)
     return SourceQuality(authority, primaryness, freshness, specificity, score, reasons)
 
 
