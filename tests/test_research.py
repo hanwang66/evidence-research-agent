@@ -1,8 +1,10 @@
 import asyncio
 import re
 
+import pytest
+
 from evidence_research.models import ClaimStatus
-from evidence_research.research import DeepResearchAgent
+from evidence_research.research import DeepResearchAgent, ResearchBudget, ResearchBudgetExceeded
 
 
 class FakeSearch:
@@ -55,6 +57,18 @@ class FakeModel:
         }
 
 
+class WideFakeModel(FakeModel):
+    async def generate_json(self, *, system: str, prompt: str) -> dict[str, object]:
+        if "Generate at most" in prompt:
+            return {
+                "queries": [
+                    {"query": "industry growth 2024", "researchGoal": "growth"},
+                    {"query": "industry risks 2024", "researchGoal": "risks"},
+                ]
+            }
+        return await super().generate_json(system=system, prompt=prompt)
+
+
 def test_research_pipeline_builds_verified_claims() -> None:
     result = asyncio.run(
         DeepResearchAgent(search=FakeSearch(), model=FakeModel()).research(
@@ -65,3 +79,29 @@ def test_research_pipeline_builds_verified_claims() -> None:
     assert len(result.evidence) == 1
     assert result.claims[0].status == ClaimStatus.VERIFIED
     assert result.claims[0].confidence == 0.95
+
+
+def test_research_budget_limits_search_calls_across_branches() -> None:
+    budget = ResearchBudget(max_searches=1, max_model_calls=20, max_seconds=30)
+
+    with pytest.raises(ResearchBudgetExceeded, match="search_calls"):
+        asyncio.run(
+            DeepResearchAgent(search=FakeSearch(), model=WideFakeModel(), budget=budget).research(
+                query="What happened?", breadth=2, depth=1
+            )
+        )
+
+    assert budget.search_calls == 1
+
+
+def test_research_budget_limits_model_calls() -> None:
+    budget = ResearchBudget(max_searches=2, max_model_calls=1, max_seconds=30)
+
+    with pytest.raises(ResearchBudgetExceeded, match="model_calls"):
+        asyncio.run(
+            DeepResearchAgent(search=FakeSearch(), model=FakeModel(), budget=budget).research(
+                query="What happened?", breadth=1, depth=1
+            )
+        )
+
+    assert budget.model_calls == 1

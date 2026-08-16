@@ -27,6 +27,8 @@ and a verification status.
 | Claim verification | Marks claims as verified, partially verified, contradicted, or unverified | Implemented |
 | Citation audit | Measures citation coverage and reports missing citations | Implemented |
 | Reliability evaluation | Measures quote support, evidence coverage, verification, and source quality | Implemented |
+| Provider resilience | Retries transient provider failures with timeout and error classification | Implemented |
+| Research budget | Limits recursive searches, model calls, and total elapsed time | Implemented |
 | Async concurrency | Limits concurrent search requests with `asyncio.Semaphore` | Implemented |
 | FastAPI endpoint | Runs a complete research request and returns Markdown plus evidence data | Implemented |
 | Persistent research jobs | Resume, cache, and inspect historical tasks | Planned |
@@ -92,7 +94,14 @@ The response contains:
 - `evidence`: exact quotes mapped to source IDs;
 - `sources`: URLs and quality scores;
 - `evaluation`: deterministic reliability metrics and pass/fail status;
+- `budget`: search/model call counts, remaining limits, and elapsed time;
 - `learnings` and `visited_urls`: compatibility fields from the upstream flow.
+
+Provider and research limits are configured through environment variables in
+`.env.local`. Transient timeouts, rate limits, connection failures, and 5xx
+responses are retried with exponential backoff. Exhausted provider failures
+are returned as classified 429/502/503/504 errors; exhausted research budgets
+are returned as 429 errors.
 
 Run the live smoke evaluation against the cases in `evals/cases.json`:
 
@@ -146,7 +155,8 @@ ground-truth benchmark for real-world claim accuracy or contradiction recall.
 ```bash
 git switch main
 uv run pytest
-uv run ruff check evidence_research tests
+uv run ruff check evidence_research tests scripts
+uv run ruff format --check evidence_research tests scripts
 uv run mypy evidence_research
 ```
 

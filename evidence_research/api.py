@@ -7,9 +7,14 @@ from pydantic import BaseModel, Field
 
 from .evaluation import evaluate_result
 from .industry import IndustryRequest, build_industry_prompt
-from .providers import providers_from_env
+from .providers import ProviderError, providers_from_env
 from .report import write_report
-from .research import DeepResearchAgent
+from .research import (
+    DeepResearchAgent,
+    ResearchBudgetExceeded,
+    budget_from_env,
+    concurrency_from_env,
+)
 
 app = FastAPI(title="Evidence Research Agent", version="0.2.0")
 
@@ -31,7 +36,12 @@ async def healthz() -> dict[str, str]:
 
 async def _execute(request: ResearchRequest) -> dict[str, object]:
     search, model = providers_from_env()
-    agent = DeepResearchAgent(search=search, model=model)
+    agent = DeepResearchAgent(
+        search=search,
+        model=model,
+        concurrency=concurrency_from_env(),
+        budget=budget_from_env(),
+    )
     prompt = build_industry_prompt(
         IndustryRequest(
             question=request.query,
@@ -48,12 +58,13 @@ async def _execute(request: ResearchRequest) -> dict[str, object]:
         claims=result.claims,
         evidence=result.evidence,
         sources=result.sources,
-        model=model,
+        model=agent.model,
     )
     return {
         "report": report,
         **asdict(result),
         "evaluation": evaluate_result(report=report, result=result),
+        "budget": agent.budget.snapshot(),
     }
 
 
@@ -61,5 +72,27 @@ async def _execute(request: ResearchRequest) -> dict[str, object]:
 async def research(request: ResearchRequest) -> dict[str, object]:
     try:
         return await _execute(request)
+    except ResearchBudgetExceeded as exc:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "research_budget_exceeded",
+                "resource": exc.resource,
+                "limit": exc.limit,
+                "used": exc.used,
+            },
+        ) from exc
+    except ProviderError as exc:
+        status_code = {
+            "timeout": 504,
+            "rate_limit": 429,
+            "unavailable": 503,
+            "invalid_payload": 502,
+            "bad_response": 502,
+        }.get(exc.kind, 502)
+        raise HTTPException(
+            status_code=status_code,
+            detail={"error": "provider_error", "provider": exc.provider, "kind": exc.kind},
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

@@ -46,6 +46,7 @@ async def _run_case(*, case: dict[str, Any], agent: DeepResearchAgent, model: An
         "id": str(case.get("id", case["query"])),
         "query": case["query"],
         "evaluation": evaluate_result(report=report, result=result),
+        "budget": agent.budget.snapshot(),
     }
 
 
@@ -53,7 +54,7 @@ async def _run(cases_path: Path) -> dict[str, Any]:
     search, model = providers_from_env()
     agent = DeepResearchAgent(search=search, model=model)
     cases = _load_cases(cases_path)
-    results = [await _run_case(case=case, agent=agent, model=model) for case in cases]
+    results = [await _run_case(case=case, agent=agent, model=agent.model) for case in cases]
     return {
         "case_count": len(results),
         "passed_count": sum(1 for item in results if item["evaluation"]["passed"]),
