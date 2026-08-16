@@ -49,22 +49,10 @@ That enables three reliability checks:
 An authoritative source is not automatically proof of a claim. Contradictions
 and insufficient evidence are preserved in the report instead of being hidden.
 
-## TypeScript → Python mapping
-
-| Original TypeScript module | Python module | Responsibility |
-|---|---|---|
-| `src/deep-research.ts` | `evidence_research/research.py` | Research orchestration and recursion |
-| `src/sources.ts` | `evidence_research/sources.py` | URL normalization and source scoring |
-| `src/evidence.ts` | `evidence_research/evidence.py` | Evidence extraction and claim verification |
-| `src/citations.ts` | `evidence_research/citations.py` | Citation rendering and audit |
-| `src/industry.ts` | `evidence_research/industry.py` | Industry-specific constraints |
-| `src/api.ts` | `evidence_research/api.py` | FastAPI HTTP API |
-| Zod schemas | Dataclasses and typed model boundaries | Structured domain data |
-| `p-limit` | `asyncio.Semaphore` | Bounded concurrency |
-
-The original TypeScript version remains on `main` as the `v0.1.0` baseline. The
-Python migration is developed on `rewrite/python` so the rewrite can be
-reviewed as a focused architectural change.
+The repository is Python-only. The runtime boundary is FastAPI, the
+orchestrator is asynchronous, domain data uses typed dataclasses, and bounded
+concurrency is implemented with `asyncio.Semaphore`. The original TypeScript
+implementation remains available in Git history for migration reference.
 
 ## Quick start
 
@@ -132,14 +120,15 @@ The next evaluation layer will measure more than answer fluency:
 ## Development workflow
 
 ```bash
-git switch rewrite/python
+git switch main
 uv run pytest
 uv run ruff check evidence_research tests
 uv run mypy evidence_research
 ```
 
-The pull request for this branch documents the migration from TypeScript to
-Python while keeping the original `main` branch stable.
+Feature branches should be created from the Python-only `main` after this
+cleanup PR is merged. TypeScript and Node tooling are intentionally not part
+of the runtime or CI path.
 
 ## Attribution and license
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any
 
 from .models import Claim, ClaimStatus, Evidence, SourceDocument
 from .providers import JsonModel
@@ -51,7 +50,12 @@ async def extract_evidence(
                 continue
             source_id = raw_item.get("sourceId")
             quote = raw_item.get("quote")
-            if not isinstance(source_id, str) or source_id not in source_ids or not isinstance(quote, str) or not quote.strip():
+            if (
+                not isinstance(source_id, str)
+                or source_id not in source_ids
+                or not isinstance(quote, str)
+                or not quote.strip()
+            ):
                 continue
             evidence_id = f"evidence-{_short_id(f'{source_id}:{quote}')}"
             evidence.append(
@@ -92,8 +96,14 @@ async def verify_claims(
             if not item:
                 continue
             source = source_by_id.get(item.source_id)
-            items.append(f"[{item.id}] {item.stance}; source score={source.quality.score if source else 0}: {item.quote}")
-        claim_context.append(f'<claim id="{claim.id}">{claim.text}\n{chr(10).join(items) or "NO EVIDENCE"}</claim>')
+            items.append(
+                f"[{item.id}] {item.stance}; "
+                f"source score={source.quality.score if source else 0}: {item.quote}"
+            )
+        claim_context.append(
+            f'<claim id="{claim.id}">{claim.text}\n'
+            f'{chr(10).join(items) or "NO EVIDENCE"}</claim>'
+        )
 
     payload = await model.generate_json(
         system=(
