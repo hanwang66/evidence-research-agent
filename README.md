@@ -26,6 +26,7 @@ and a verification status.
 | Evidence extraction | Extracts exact quotes and maps them to source IDs | Implemented |
 | Claim verification | Marks claims as verified, partially verified, contradicted, or unverified | Implemented |
 | Citation audit | Measures citation coverage and reports missing citations | Implemented |
+| Reliability evaluation | Measures quote support, evidence coverage, verification, and source quality | Implemented |
 | Async concurrency | Limits concurrent search requests with `asyncio.Semaphore` | Implemented |
 | FastAPI endpoint | Runs a complete research request and returns Markdown plus evidence data | Implemented |
 | Persistent research jobs | Resume, cache, and inspect historical tasks | Planned |
@@ -90,7 +91,19 @@ The response contains:
 - `claims`: verification status and confidence for each conclusion;
 - `evidence`: exact quotes mapped to source IDs;
 - `sources`: URLs and quality scores;
+- `evaluation`: deterministic reliability metrics and pass/fail status;
 - `learnings` and `visited_urls`: compatibility fields from the upstream flow.
+
+Run the live smoke evaluation against the cases in `evals/cases.json`:
+
+```bash
+uv run python -m scripts.run_eval
+```
+
+The evaluation requires the configured Firecrawl and model credentials. It
+checks pipeline contracts such as citation coverage and whether every quote
+exists in fetched source content; it does not determine whether a claim is
+true in the real world.
 
 ## Project structure
 
@@ -103,19 +116,30 @@ evidence_research/
 ├── sources.py      # URL normalization and source quality scoring
 ├── evidence.py     # Claim/evidence extraction and verification
 ├── citations.py    # Citation rendering and audit
+├── evaluation.py   # Deterministic reliability metrics
 ├── industry.py     # Industry research request handling
 └── report.py       # Evidence-grounded report generation
+
+evals/
+├── cases.json      # Live research smoke cases
+
+scripts/
+└── run_eval.py     # Evaluation runner
 ```
 
-## Evaluation plan
+## Evaluation
 
-The next evaluation layer will measure more than answer fluency:
+The evaluation layer measures more than answer fluency:
 
 - citation coverage: important claims with citations;
-- citation entailment: whether the quote actually supports the claim;
+- quote support: whether every quote exists in fetched source content;
+- important claim evidence coverage: whether important claims have accepted evidence;
+- verification status: verified, partially verified, contradicted, or unverified;
 - source quality: authority, primaryness, freshness, and specificity;
-- contradiction recall: whether conflicting sources are surfaced;
-- freshness violations, latency, and cost per report.
+- orphan and unsupported evidence IDs.
+
+These are deterministic pipeline metrics. They do not replace a labeled
+ground-truth benchmark for real-world claim accuracy or contradiction recall.
 
 ## Development workflow
 
