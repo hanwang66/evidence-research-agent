@@ -33,5 +33,8 @@ def build_industry_prompt(request: IndustryRequest) -> str:
     if constraints:
         parts.append("Research constraints:\n" + "\n".join(constraints))
     parts.append("Unless excluded, cover:\n" + "\n".join(f"- {item}" for item in DEFAULT_DIMENSIONS))
-    parts.append("Prefer primary, regulator, official, academic, and reputable media sources. Preserve conflicting evidence.")
+    parts.append(
+        "Prefer primary, regulator, official, academic, and reputable media sources. "
+        "Preserve conflicting evidence."
+    )
     return "\n\n".join(parts)

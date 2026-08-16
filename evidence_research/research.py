@@ -16,7 +16,9 @@ class DeepResearchAgent:
 
     async def _generate_queries(self, query: str, breadth: int) -> list[dict[str, str]]:
         payload = await self.model.generate_json(
-            system="You generate diverse, focused search queries for an industry researcher. Return JSON only.",
+            system=(
+                "You generate diverse, focused search queries for an industry researcher. Return JSON only."
+            ),
             prompt=(
                 f"Generate at most {breadth} unique SERP queries for this research question: {query}\n"
                 "Return {queries: [{query, researchGoal}]} and avoid near-duplicates."
@@ -36,7 +38,11 @@ class DeepResearchAgent:
         learnings = [claim.text for claim in claims]
         follow_up_payload = await self.model.generate_json(
             system="You identify concise follow-up research directions. Return JSON only.",
-            prompt=f"Research goal: {goal}\nFindings:\n" + "\n".join(learnings) + "\nReturn {questions: [string]}.",
+            prompt=(
+                f"Research goal: {goal}\nFindings:\n"
+                + "\n".join(learnings)
+                + "\nReturn {questions: [string]}."
+            ),
         )
         follow_ups = [item for item in follow_up_payload.get("questions", []) if isinstance(item, str)]
         return (

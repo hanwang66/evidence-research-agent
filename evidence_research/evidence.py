@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any
+import re
+from math import isfinite
 
 from .models import Claim, ClaimStatus, Evidence, SourceDocument
 from .providers import JsonModel
@@ -17,6 +18,26 @@ def _source_context(sources: list[SourceDocument]) -> str:
         f"{source.content[:12000]}\n</source>"
         for source in sources
     )
+
+
+def _normalise_text(value: str) -> str:
+    """Collapse formatting differences while preserving the quoted words."""
+
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def quote_supported(*, quote: str, content: str) -> bool:
+    """Return whether a model-provided quote exists in fetched source content."""
+
+    return bool(quote.strip()) and _normalise_text(quote) in _normalise_text(content)
+
+
+def _bounded_float(value: object, *, default: float = 0.0) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return min(1.0, max(0.0, parsed)) if isfinite(parsed) else default
 
 
 async def extract_evidence(
@@ -38,20 +59,37 @@ async def extract_evidence(
         ),
     )
 
-    source_ids = {source.id for source in sources}
+    source_by_id = {source.id: source for source in sources}
     claims: list[Claim] = []
     evidence: list[Evidence] = []
-    for raw_claim in payload.get("claims", []):
+    raw_claims = payload.get("claims", []) if isinstance(payload, dict) else []
+    if not isinstance(raw_claims, list):
+        raw_claims = []
+    for raw_claim in raw_claims[:max_claims]:
         if not isinstance(raw_claim, dict) or not isinstance(raw_claim.get("text"), str):
             continue
-        claim_id = f"claim-{_short_id(raw_claim['text'])}"
+        claim_text = raw_claim["text"].strip()
+        if not claim_text:
+            continue
+        claim_id = f"claim-{_short_id(claim_text)}"
         evidence_ids: list[str] = []
-        for raw_item in raw_claim.get("evidence", []):
+        raw_evidence = raw_claim.get("evidence", [])
+        if not isinstance(raw_evidence, list):
+            raw_evidence = []
+        for raw_item in raw_evidence:
             if not isinstance(raw_item, dict):
                 continue
             source_id = raw_item.get("sourceId")
             quote = raw_item.get("quote")
-            if not isinstance(source_id, str) or source_id not in source_ids or not isinstance(quote, str) or not quote.strip():
+            if (
+                not isinstance(source_id, str)
+                or source_id not in source_by_id
+                or not isinstance(quote, str)
+                or not quote.strip()
+            ):
+                continue
+            source = source_by_id[source_id]
+            if not quote_supported(quote=quote, content=source.content):
                 continue
             evidence_id = f"evidence-{_short_id(f'{source_id}:{quote}')}"
             evidence.append(
@@ -61,14 +99,14 @@ async def extract_evidence(
                     quote=quote.strip(),
                     locator=raw_item.get("locator") if isinstance(raw_item.get("locator"), str) else None,
                     stance=str(raw_item.get("stance", "context")),
-                    relevance_score=float(raw_item.get("relevanceScore", 0.5)),
+                    relevance_score=_bounded_float(raw_item.get("relevanceScore", 0.5), default=0.5),
                 )
             )
             evidence_ids.append(evidence_id)
         claims.append(
             Claim(
                 id=claim_id,
-                text=raw_claim["text"],
+                text=claim_text,
                 category=str(raw_claim.get("category", "general")),
                 importance=str(raw_claim.get("importance", "medium")),
                 evidence_ids=evidence_ids,
@@ -92,8 +130,13 @@ async def verify_claims(
             if not item:
                 continue
             source = source_by_id.get(item.source_id)
-            items.append(f"[{item.id}] {item.stance}; source score={source.quality.score if source else 0}: {item.quote}")
-        claim_context.append(f'<claim id="{claim.id}">{claim.text}\n{chr(10).join(items) or "NO EVIDENCE"}</claim>')
+            items.append(
+                f"[{item.id}] {item.stance}; "
+                f"source score={source.quality.score if source else 0}: {item.quote}"
+            )
+        claim_context.append(
+            f'<claim id="{claim.id}">{claim.text}\n{chr(10).join(items) or "NO EVIDENCE"}</claim>'
+        )
 
     payload = await model.generate_json(
         system=(
@@ -106,21 +149,39 @@ async def verify_claims(
             + "\n".join(claim_context)
         ),
     )
+    raw_verifications = payload.get("verifications", []) if isinstance(payload, dict) else []
+    if not isinstance(raw_verifications, list):
+        raw_verifications = []
     verification_by_id = {
         item.get("claimId"): item
-        for item in payload.get("verifications", [])
+        for item in raw_verifications
         if isinstance(item, dict) and isinstance(item.get("claimId"), str)
     }
-    return [
-        Claim(
-            **{
-                **claim.__dict__,
-                "status": ClaimStatus(str(item.get("verdict", ClaimStatus.UNVERIFIED))),
-                "confidence": float(item.get("confidence", 0)),
-                "rationale": str(item.get("rationale", "")),
-            }
+
+    verified_claims: list[Claim] = []
+    for claim in claims:
+        item = verification_by_id.get(claim.id)
+        if not item:
+            verified_claims.append(claim)
+            continue
+
+        # A model cannot promote a claim without accepted evidence.
+        if not claim.evidence_ids:
+            verified_claims.append(claim)
+            continue
+
+        try:
+            status = ClaimStatus(str(item.get("verdict", ClaimStatus.UNVERIFIED)))
+        except ValueError:
+            status = ClaimStatus.UNVERIFIED
+        verified_claims.append(
+            Claim(
+                **{
+                    **claim.__dict__,
+                    "status": status,
+                    "confidence": _bounded_float(item.get("confidence", 0)),
+                    "rationale": str(item.get("rationale", "")),
+                }
+            )
         )
-        if (item := verification_by_id.get(claim.id))
-        else claim
-        for claim in claims
-    ]
+    return verified_claims

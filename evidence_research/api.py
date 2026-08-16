@@ -5,10 +5,11 @@ from dataclasses import asdict
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from .evaluation import evaluate_result
 from .industry import IndustryRequest, build_industry_prompt
 from .providers import providers_from_env
-from .research import DeepResearchAgent
 from .report import write_report
+from .research import DeepResearchAgent
 
 app = FastAPI(title="Evidence Research Agent", version="0.2.0")
 
@@ -28,29 +29,37 @@ async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+async def _execute(request: ResearchRequest) -> dict[str, object]:
+    search, model = providers_from_env()
+    agent = DeepResearchAgent(search=search, model=model)
+    prompt = build_industry_prompt(
+        IndustryRequest(
+            question=request.query,
+            industry=request.industry,
+            region=request.region,
+            time_range=request.time_range,
+            companies=request.companies,
+        )
+    )
+    result = await agent.research(query=prompt, breadth=request.breadth, depth=request.depth)
+    report = await write_report(
+        prompt=prompt,
+        learnings=result.learnings,
+        claims=result.claims,
+        evidence=result.evidence,
+        sources=result.sources,
+        model=model,
+    )
+    return {
+        "report": report,
+        **asdict(result),
+        "evaluation": evaluate_result(report=report, result=result),
+    }
+
+
 @app.post("/api/research")
 async def research(request: ResearchRequest) -> dict[str, object]:
     try:
-        search, model = providers_from_env()
-        agent = DeepResearchAgent(search=search, model=model)
-        prompt = build_industry_prompt(
-            IndustryRequest(
-                question=request.query,
-                industry=request.industry,
-                region=request.region,
-                time_range=request.time_range,
-                companies=request.companies,
-            )
-        )
-        result = await agent.research(query=prompt, breadth=request.breadth, depth=request.depth)
-        report = await write_report(
-            prompt=prompt,
-            learnings=result.learnings,
-            claims=result.claims,
-            evidence=result.evidence,
-            sources=result.sources,
-            model=model,
-        )
-        return {"report": report, **asdict(result)}
+        return await _execute(request)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

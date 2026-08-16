@@ -42,9 +42,7 @@ class SourceDocument:
     title: str | None = None
     publisher: str | None = None
     published_at: str | None = None
-    quality: SourceQuality = field(
-        default_factory=lambda: SourceQuality(0, 0, 0, 0, 0)
-    )
+    quality: SourceQuality = field(default_factory=lambda: SourceQuality(0, 0, 0, 0, 0))
 
 
 @dataclass(frozen=True)

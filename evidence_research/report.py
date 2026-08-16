@@ -21,15 +21,18 @@ async def write_report(
             "Clearly label contradicted and unverified claims. Return JSON only."
         ),
         prompt=(
-            f"Research question:\n{prompt}\n\nLearnings:\n" + "\n".join(learnings) +
-            "\n\nEvidence graph:\n" + evidence_graph_text(claims=claims, evidence=evidence, sources=sources) +
-            "\n\nReturn {reportMarkdown: string}."
+            f"Research question:\n{prompt}\n\nLearnings:\n"
+            + "\n".join(learnings)
+            + "\n\nEvidence graph:\n"
+            + evidence_graph_text(claims=claims, evidence=evidence, sources=sources)
+            + "\n\nReturn {reportMarkdown: string}."
         ),
     )
     report = str(payload.get("reportMarkdown", ""))
     audit = audit_citations(report, claims)
     source_lines = [
-        f"- [{source.id}] {source.title or source.canonical_url} — quality {source.quality.score}/100 — {source.canonical_url}"
+        f"- [{source.id}] {source.title or source.canonical_url} — "
+        f"quality {source.quality.score}/100 — {source.canonical_url}"
         for source in sources
     ]
     source_text = "\n".join(source_lines)

@@ -30,7 +30,8 @@ def evidence_graph_text(
                 continue
             source = source_by_id.get(item.source_id)
             lines.append(
-                f"[{citation_id(claim)}] {item.stance}; {source.canonical_url if source else item.source_id}; quote: {item.quote}"
+                f"[{citation_id(claim)}] {item.stance}; "
+                f"{source.canonical_url if source else item.source_id}; quote: {item.quote}"
             )
         lines.append("</claim>")
     return "\n".join(lines)

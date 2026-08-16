@@ -1,0 +1,22 @@
+[
+  {
+    "id": "cn-ev-trends",
+    "query": "What are the major competitive and technology trends?",
+    "industry": "新能源汽车",
+    "region": "中国",
+    "time_range": "2023-2025",
+    "companies": ["比亚迪", "特斯拉", "理想汽车"],
+    "breadth": 2,
+    "depth": 1
+  },
+  {
+    "id": "us-ai-regulation",
+    "query": "What are the main regulatory risks and uncertainties for generative AI companies?",
+    "industry": "人工智能",
+    "region": "美国",
+    "time_range": "2024-2025",
+    "companies": [],
+    "breadth": 2,
+    "depth": 1
+  }
+]

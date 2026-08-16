@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .models import SourceDocument, SourceQuality, SourceType
@@ -90,7 +90,7 @@ def _parse_date(value: str | None) -> datetime | None:
         return None
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
     except ValueError:
         return None
 
@@ -121,7 +121,7 @@ def score_source(
     freshness = 0.35
     published = _parse_date(published_at)
     if published:
-        age_days = max(0, (datetime.now(timezone.utc) - published).days)
+        age_days = max(0, (datetime.now(UTC) - published).days)
         freshness = max(0.0, 1 - age_days / max_age_days)
         reasons.append(f"published {age_days} days ago")
     else:
@@ -132,10 +132,7 @@ def score_source(
     if specificity >= 0.7:
         reasons.append("contains substantial source content")
 
-    score = round(
-        (authority * 0.3 + primaryness * 0.25 + freshness * 0.2 + specificity * 0.25)
-        * 100
-    )
+    score = round((authority * 0.3 + primaryness * 0.25 + freshness * 0.2 + specificity * 0.25) * 100)
     return SourceQuality(authority, primaryness, freshness, specificity, score, reasons)
 
 
@@ -159,7 +156,7 @@ def source_from_item(item: dict[str, object], max_age_days: int = 730) -> Source
         canonical_url=canonical_url,
         content=content.strip(),
         source_type=source_type,
-        fetched_at=datetime.now(timezone.utc).isoformat(),
+        fetched_at=datetime.now(UTC).isoformat(),
         title=title,
         publisher=metadata.get("sourceURL") if isinstance(metadata.get("sourceURL"), str) else None,
         published_at=published_at,
