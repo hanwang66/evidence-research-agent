@@ -31,7 +31,7 @@ and a verification status.
 | Research budget | Limits recursive searches, model calls, and total elapsed time | Implemented |
 | Async concurrency | Limits concurrent search requests with `asyncio.Semaphore` | Implemented |
 | FastAPI endpoint | Runs a complete research request and returns Markdown plus evidence data | Implemented |
-| Persistent research jobs | Resume, cache, and inspect historical tasks | Planned |
+| Persistent research jobs | Queue, cache, and inspect historical tasks in SQLite | Implemented |
 | Evaluation dashboard | Track entailment, source quality, freshness, cost, and latency | Planned |
 
 ## Why this is different from a basic Deep Research demo
@@ -71,7 +71,9 @@ uv run pytest
 uv run uvicorn evidence_research.api:app --reload --port 3051
 ```
 
-The API exposes `GET /healthz` and `POST /api/research`.
+The API exposes `GET /healthz`, synchronous `POST /api/research`, and the
+asynchronous task endpoints `POST /api/research/jobs`,
+`GET /api/research/jobs/{task_id}`, and `GET /api/research/jobs`.
 
 ```bash
 curl -X POST http://localhost:3051/api/research \
@@ -89,6 +91,8 @@ curl -X POST http://localhost:3051/api/research \
 
 The response contains:
 
+- `task_id` and `cache_hit`: the persisted task identity and whether a completed
+  result was reused;
 - `report`: Markdown report with inline claim citations;
 - `claims`: verification status and confidence for each conclusion;
 - `evidence`: exact quotes mapped to source IDs;
@@ -96,6 +100,24 @@ The response contains:
 - `evaluation`: deterministic reliability metrics and pass/fail status;
 - `budget`: search/model call counts, remaining limits, and elapsed time;
 - `learnings` and `visited_urls`: compatibility fields from the upstream flow.
+
+For long-running requests, enqueue a background task and poll its result:
+
+```bash
+curl -X POST http://localhost:3051/api/research/jobs \
+  -H 'content-type: application/json' \
+  -d '{"query": "What are the major competitive and technology trends?", "breadth": 3, "depth": 2}'
+
+curl http://localhost:3051/api/research/jobs/<task_id>
+```
+
+Task state, request payloads, completed results, and failures are stored in the
+SQLite database configured by `RESEARCH_DB_PATH` (default:
+`data/research.db`). The Docker Compose setup mounts `./data` so the database
+survives container replacement. The current background runner is FastAPI's
+in-process `BackgroundTasks`: SQLite makes task history and cache durable, but
+running work is not resumed after a process crash. A production deployment
+that needs crash recovery should move execution to a separate worker queue.
 
 Provider and research limits are configured through environment variables in
 `.env.local`. Transient timeouts, rate limits, connection failures, and 5xx
@@ -127,6 +149,7 @@ evidence_research/
 ├── citations.py    # Citation rendering and audit
 ├── evaluation.py   # Deterministic reliability metrics
 ├── industry.py     # Industry research request handling
+├── storage.py      # SQLite task state and result cache
 └── report.py       # Evidence-grounded report generation
 
 evals/

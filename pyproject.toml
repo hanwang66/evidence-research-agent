@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "evidence-research-agent"
-version = "0.2.0"
+version = "0.3.0"
 description = "Evidence-first industry research agent with source quality scoring and citation audits"
 readme = "README.md"
 requires-python = ">=3.12"
