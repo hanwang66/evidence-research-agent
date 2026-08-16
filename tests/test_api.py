@@ -1,7 +1,7 @@
 import asyncio
 
 import pytest
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 
 from evidence_research import api
 from evidence_research.models import (
@@ -15,6 +15,17 @@ from evidence_research.models import (
 )
 from evidence_research.providers import ProviderError
 from evidence_research.research import ResearchBudget, ResearchBudgetExceeded
+from evidence_research.storage import TaskStateStore
+
+
+@pytest.fixture(autouse=True)
+def isolated_task_store(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        api.app.state,
+        "task_store",
+        TaskStateStore(tmp_path / "research.db"),
+        raising=False,
+    )
 
 
 class FakeAgent:
@@ -112,3 +123,66 @@ def test_research_endpoint_maps_budget_exhaustion(monkeypatch) -> None:
         "limit": 1,
         "used": 1,
     }
+
+
+def test_research_endpoint_persists_and_caches_completed_result(monkeypatch) -> None:
+    calls = 0
+
+    async def execute(_request: api.ResearchRequest) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return {"report": "cached report", "claims": [], "evidence": [], "sources": []}
+
+    monkeypatch.setattr(api, "_execute", execute)
+    request = api.ResearchRequest(query="What changed?")
+
+    first = asyncio.run(api.research(request))
+    second = asyncio.run(api.research(request))
+
+    assert calls == 1
+    assert first["cache_hit"] is False
+    assert second["cache_hit"] is True
+    assert first["task_id"] == second["task_id"]
+    assert second["report"] == "cached report"
+
+
+def test_background_research_job_is_completed_and_queryable(monkeypatch) -> None:
+    async def execute(_request: api.ResearchRequest) -> dict[str, object]:
+        return {"report": "background report", "claims": []}
+
+    monkeypatch.setattr(api, "_execute", execute)
+    background_tasks = BackgroundTasks()
+
+    accepted = asyncio.run(api.create_research_job(api.ResearchRequest(query="Run later"), background_tasks))
+    asyncio.run(background_tasks())
+    completed = asyncio.run(api.get_research_job(str(accepted["task_id"])))
+
+    assert accepted["status"] == "queued"
+    assert completed["status"] == "completed"
+    assert completed["result"] == {"report": "background report", "claims": []}
+
+
+def test_background_research_job_records_failure(monkeypatch) -> None:
+    async def fail(_request: api.ResearchRequest) -> dict[str, object]:
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(api, "_execute", fail)
+    background_tasks = BackgroundTasks()
+    accepted = asyncio.run(api.create_research_job(api.ResearchRequest(query="Will fail"), background_tasks))
+    asyncio.run(background_tasks())
+    failed = asyncio.run(api.get_research_job(str(accepted["task_id"])))
+
+    assert failed["status"] == "failed"
+    assert failed["error"] == "model unavailable"
+
+
+def test_background_research_job_reuses_active_duplicate() -> None:
+    first_tasks = BackgroundTasks()
+    second_tasks = BackgroundTasks()
+    request = api.ResearchRequest(query="Duplicate job")
+
+    first = asyncio.run(api.create_research_job(request, first_tasks))
+    second = asyncio.run(api.create_research_job(request, second_tasks))
+
+    assert first["task_id"] == second["task_id"]
+    assert second["status"] == "queued"
